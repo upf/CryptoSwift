@@ -48,6 +48,7 @@ final public class AES {
     private let key:[UInt8]
     private let iv:[UInt8]?
     public lazy var expandedKey:[UInt8] = { AES.expandKey(self.key, variant: self.variant) }()
+    public lazy var expandedKey2:RawData = { AES.expandKey2(RawData(self.key), variant: self.variant) }()
     
     static private let sBox:[UInt8] = [
         0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 
@@ -287,8 +288,54 @@ final public class AES {
                 w[4*i+wordIdx] = w[4*(i-variant.Nk)+wordIdx]^tmp[wordIdx];
             }
         }
-        return w;
+        return w
     }
+    
+    static private func expandKey2(key:RawData, variant:AESVariant) -> RawData {
+        
+        /*
+        * Function used in the Key Expansion routine that takes a four-byte
+        * input word and applies an S-box to each of the four bytes to
+        * produce an output word.
+        */
+        func subWord(word:RawData) -> RawData {
+            let result = RawData(4) // word.copy()
+            for i in 0..<4 {
+                result[i] = self.sBox[Int(word[i])]
+            }
+            return result
+        }
+        
+        let w = RawData(variant.Nb * (variant.Nr + 1) * 4) //[UInt8](count: variant.Nb * (variant.Nr + 1) * 4, repeatedValue: 0)
+        for i in 0..<variant.Nk {
+            for wordIdx in 0..<4 {
+                w[(4*i)+wordIdx] = key[(4*i)+wordIdx]
+            }
+        }
+        
+        for (var i = variant.Nk; i < variant.Nb * (variant.Nr + 1); i++) {
+            var tmp = RawData(4) // [UInt8](count: 4, repeatedValue: 0)
+            
+            for wordIdx in 0..<4 {
+                tmp[wordIdx] = w[4*(i-1)+wordIdx]
+            }
+            if ((i % variant.Nk) == 0) {
+                //let rotWord = rotateLeft(UInt32.withBytes(tmp), n: 8).bytes(sizeof(UInt32)) // RotWord
+                let rotWord = rotateLeftBytes(tmp, n: 1) // RotWord
+                tmp = subWord(rotWord)
+                tmp[0] = tmp[0] ^ Rcon[i/variant.Nk]
+            } else if (variant.Nk > 6 && (i % variant.Nk) == 4) {
+                tmp = subWord(tmp)
+            }
+            
+            // xor array of bytes
+            for wordIdx in 0..<4 {
+                w[4*i+wordIdx] = w[4*(i-variant.Nk)+wordIdx]^tmp[wordIdx];
+            }
+        }
+        return w
+    }
+
 }
 
 extension AES {
@@ -322,7 +369,17 @@ extension AES {
         }
         return result
     }
-    
+
+    public func shiftRows(state:[RawData]) -> [RawData] {
+        let result = state.copy()
+        for r in 1..<4 {
+            for c in 0..<variant.Nb {
+                result[r][c] = state[r][(c + r) % variant.Nb]
+            }
+        }
+        return result
+    }
+
     public func invShiftRows(state:[[UInt8]]) -> [[UInt8]] {
         var result = state
         for r in 1..<4 {
@@ -332,7 +389,17 @@ extension AES {
         }
         return result
     }
-    
+
+    public func invShiftRows(state:[RawData]) -> [RawData] {
+        let result = state.copy()
+        for r in 1..<4 {
+            for c in 0..<variant.Nb {
+                result[r][(c + r) % variant.Nb] = state[r][c]
+            }
+        }
+        return result
+    }
+
     // Multiplies two polynomials
     public func multiplyPolys(a:UInt8, _ b:UInt8) -> UInt8 {
         var a = a, b = b

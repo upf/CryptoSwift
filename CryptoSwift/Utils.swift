@@ -24,6 +24,10 @@ func rotateLeft(x:UInt64, n:UInt64) -> UInt64 {
     return (x << n) | (x >> (64 - n))
 }
 
+func rotateLeftBytes(x: RawData, n: Int) -> RawData {
+    return (x << n) | (x >> (x.count - n))
+}
+
 func rotateRight(x:UInt16, n:UInt16) -> UInt16 {
     return (x >> n) | (x << (16 - n))
 }
