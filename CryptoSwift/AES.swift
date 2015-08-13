@@ -146,6 +146,7 @@ final public class AES {
     - returns: Encrypted data
     */
 
+    @available (*, deprecated=1.0)
     public func encrypt(bytes:[UInt8], padding:Padding? = PKCS7()) throws -> [UInt8] {
         var finalBytes = bytes;
 
@@ -159,6 +160,7 @@ final public class AES {
         return try blockMode.encryptBlocks(blocks, iv: self.iv, cipherOperation: encryptBlock)
     }
     
+    @available (*, deprecated=1.0)
     private func encryptBlock(block:[UInt8]) -> [UInt8]? {
         var out:[UInt8] = [UInt8]()
         
@@ -194,6 +196,62 @@ final public class AES {
         return out
     }
     
+    public func encrypt(bytes:RawData, padding:Padding2? = PKCS7()) throws -> RawData {
+        var finalBytes = bytes.copy()
+        
+        if let padding = padding {
+            finalBytes = padding.add(bytes, blockSize: AES.blockSize)
+        } else if bytes.count % AES.blockSize != 0 {
+            throw Error.BlockSizeExceeded
+        }
+        
+        let blocks = finalBytes.chunks(AES.blockSize) // 0.34
+        let thisiv:RawData? = self.iv == nil ? nil : RawData(self.iv!)
+        return try blockMode.encryptBlocks(blocks, iv: thisiv, cipherOperation: encryptBlock)
+    }
+    
+    private func encryptBlock(block:RawData) -> RawData? {
+        var out = RawData()
+        
+        autoreleasepool { () -> () in
+            //var state:[[UInt8]] = [[UInt8]](count: variant.Nb, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
+            var state = [RawData]()
+            for _ in 0..<variant.Nb {
+                state.append(RawData(variant.Nb))
+            }
+            
+            for (i, row) in state.enumerate() {
+                for (j, _) in row.enumerate() {
+                    state[j][i] = block[i * row.count + j]
+                }
+            }
+            
+            state = addRoundKey(state,expandedKey2, 0)
+            
+            for roundCount in 1..<variant.Nr {
+                subBytes(&state)
+                state = shiftRows(state)
+                state = mixColumns(state)
+                state = addRoundKey(state, expandedKey2, roundCount)
+            }
+            
+            subBytes(&state)
+            state = shiftRows(state)
+            state = addRoundKey(state, expandedKey2, variant.Nr)
+            
+            
+            out = RawData(state.count * state.first!.count)
+            for i in 0..<state.count {
+                for j in 0..<state[i].count {
+                    out[(i * 4) + j] = state[j][i]
+                }
+            }
+        }
+        return out
+    }
+
+    
+    @available (*, deprecated=1.0)
     public func decrypt(bytes:[UInt8], padding:Padding? = PKCS7()) throws -> [UInt8] {
         if bytes.count % AES.blockSize != 0 {
             throw Error.BlockSizeExceeded
@@ -216,6 +274,7 @@ final public class AES {
         return out
     }
     
+    @available (*, deprecated=1.0)
     private func decryptBlock(block:[UInt8]) -> [UInt8]? {
         var state:[[UInt8]] = [[UInt8]](count: variant.Nb, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
         for (i, row) in state.enumerate() {
@@ -238,6 +297,66 @@ final public class AES {
         state = addRoundKey(state, expandedKey, 0)
         
         var out:[UInt8] = [UInt8]()
+        for i in 0..<state.count {
+            for j in 0..<state[0].count {
+                out.append(state[j][i])
+            }
+        }
+        
+        return out
+    }
+    
+    public func decrypt(bytes:RawData, padding:Padding2? = PKCS7()) throws -> RawData {
+        if bytes.count % AES.blockSize != 0 {
+            throw Error.BlockSizeExceeded
+        }
+        
+        let blocks = bytes.chunks(AES.blockSize)
+        let out:RawData
+        let thisiv:RawData? = self.iv == nil ? nil : RawData(self.iv!)
+        
+        switch (blockMode) {
+        case .CFB, .CTR:
+            // CFB, CTR uses encryptBlock to decrypt
+            out = try blockMode.decryptBlocks(blocks, iv: thisiv, cipherOperation: encryptBlock)
+        default:
+            out = try blockMode.decryptBlocks(blocks, iv: thisiv, cipherOperation: decryptBlock)
+        }
+        
+        if let padding = padding {
+            return padding.remove(out, blockSize: nil)
+        }
+        
+        return out
+    }
+    
+    private func decryptBlock(block:RawData) -> RawData? {
+        //var state:[[UInt8]] = [[UInt8]](count: variant.Nb, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
+        var state = [RawData]()
+        for _ in 0..<variant.Nb {
+            state.append(RawData(variant.Nb))
+        }
+
+        for (i, row) in state.enumerate() {
+            for (j, _) in row.enumerate() {
+                state[j][i] = block[i * row.count + j]
+            }
+        }
+        
+        state = addRoundKey(state,expandedKey2, variant.Nr)
+        
+        for roundCount in (1..<variant.Nr).reverse() {
+            state = invShiftRows(state)
+            state = invSubBytes(state)
+            state = addRoundKey(state, expandedKey2, roundCount)
+            state = invMixColumns(state)
+        }
+        
+        state = invShiftRows(state)
+        state = invSubBytes(state)
+        state = addRoundKey(state, expandedKey2, 0)
+        
+        let out = RawData()
         for i in 0..<state.count {
             for j in 0..<state[0].count {
                 out.append(state[j][i])

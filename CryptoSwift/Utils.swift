@@ -52,6 +52,14 @@ func xor(a: [UInt8], b:[UInt8]) -> [UInt8] {
     return xored
 }
 
+func xor(a: RawData, b:RawData) -> RawData {
+    let xored = RawData(a.count)
+    for i in 0..<xored.count {
+        xored[i] = a[i] ^ b[i]
+    }
+    return xored
+}
+
 func perf(text: String, closure: () -> ()) {
     let measurementStart = NSDate();
     
