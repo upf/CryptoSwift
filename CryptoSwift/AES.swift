@@ -45,11 +45,9 @@ final public class AES {
             preconditionFailure("Unknown AES variant for given key.")
         }
     }
-    private let key:[UInt8]
-    private let iv:[UInt8]?
-    @available (*, deprecated=1.0)
-    public lazy var expandedKey:[UInt8] = { AES.expandKey(self.key, variant: self.variant) }()
-    public lazy var expandedKey2:RawData = { AES.expandKey2(RawData(self.key), variant: self.variant) }()
+    private let key:RawData
+    private let iv:RawData?
+    public lazy var expandedKey:RawData = { AES.expandKey(self.key, variant: self.variant) }()
     
     static private let sBox:[UInt8] = [
         0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 
@@ -114,7 +112,7 @@ final public class AES {
         0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39, 0x72, 0xe4, 0xd3, 0xbd,
         0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb, 0x8d]
     
-    public init?(key:[UInt8], iv:[UInt8], blockMode:CipherBlockMode = .CBC) {
+    public init?(key:RawData, iv:RawData, blockMode:CipherBlockMode = .CBC) {
         self.key = key
         self.iv = iv
         self.blockMode = blockMode
@@ -125,15 +123,15 @@ final public class AES {
         }
     }
     
-    convenience public init?(key:[UInt8], blockMode:CipherBlockMode = .CBC) {
+    convenience public init?(key:RawData, blockMode:CipherBlockMode = .CBC) {
         // default IV is all 0x00...
-        let defaultIV = [UInt8](count: AES.blockSize, repeatedValue: 0)
+        let defaultIV = RawData(AES.blockSize)
         self.init(key: key, iv: defaultIV, blockMode: blockMode)
     }
     
     convenience public init?(key:String, iv:String, blockMode:CipherBlockMode = .CBC) {
         if let kkey = key.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)?.arrayOfBytes(), let iiv = iv.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)?.arrayOfBytes() {
-            self.init(key: kkey, iv: iiv, blockMode: blockMode)
+            self.init(key: RawData(kkey), iv: RawData(iiv), blockMode: blockMode)
         }
         return nil
     }
@@ -146,57 +144,7 @@ final public class AES {
     - returns: Encrypted data
     */
 
-    @available (*, deprecated=1.0)
-    public func encrypt(bytes:[UInt8], padding:Padding? = PKCS7()) throws -> [UInt8] {
-        var finalBytes = bytes;
-
-        if let padding = padding {
-            finalBytes = padding.add(bytes, blockSize: AES.blockSize)
-        } else if bytes.count % AES.blockSize != 0 {
-            throw Error.BlockSizeExceeded
-        }
-
-        let blocks = finalBytes.chunks(AES.blockSize) // 0.34
-        return try blockMode.encryptBlocks(blocks, iv: self.iv, cipherOperation: encryptBlock)
-    }
-    
-    @available (*, deprecated=1.0)
-    private func encryptBlock(block:[UInt8]) -> [UInt8]? {
-        var out:[UInt8] = [UInt8]()
-        
-        autoreleasepool { () -> () in
-            var state:[[UInt8]] = [[UInt8]](count: variant.Nb, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
-            for (i, row) in state.enumerate() {
-                for (j, _) in row.enumerate() {
-                    state[j][i] = block[i * row.count + j]
-                }
-            }
-            
-            state = addRoundKey(state,expandedKey, 0)
-            
-            for roundCount in 1..<variant.Nr {
-                subBytes(&state)
-                state = shiftRows(state)
-                state = mixColumns(state)
-                state = addRoundKey(state, expandedKey, roundCount)
-            }
-            
-            subBytes(&state)
-            state = shiftRows(state)
-            state = addRoundKey(state, expandedKey, variant.Nr)
-
-
-            out = [UInt8](count: state.count * state.first!.count, repeatedValue: 0)
-            for i in 0..<state.count {
-                for j in 0..<state[i].count {
-                    out[(i * 4) + j] = state[j][i]
-                }
-            }
-        }
-        return out
-    }
-    
-    public func encrypt(bytes:RawData, padding:Padding2? = PKCS7()) throws -> RawData {
+    public func encrypt(bytes:RawData, padding:Padding? = PKCS7()) throws -> RawData {
         var finalBytes = bytes.copy()
         
         if let padding = padding {
@@ -226,18 +174,18 @@ final public class AES {
                 }
             }
             
-            state = addRoundKey(state,expandedKey2, 0)
+            state = addRoundKey(state,expandedKey, 0)
             
             for roundCount in 1..<variant.Nr {
                 subBytes(&state)
                 state = shiftRows(state)
                 state = mixColumns(state)
-                state = addRoundKey(state, expandedKey2, roundCount)
+                state = addRoundKey(state, expandedKey, roundCount)
             }
             
             subBytes(&state)
             state = shiftRows(state)
-            state = addRoundKey(state, expandedKey2, variant.Nr)
+            state = addRoundKey(state, expandedKey, variant.Nr)
             
             
             out = RawData(state.count * state.first!.count)
@@ -249,64 +197,8 @@ final public class AES {
         }
         return out
     }
-
     
-    @available (*, deprecated=1.0)
-    public func decrypt(bytes:[UInt8], padding:Padding? = PKCS7()) throws -> [UInt8] {
-        if bytes.count % AES.blockSize != 0 {
-            throw Error.BlockSizeExceeded
-        }
-        
-        let blocks = bytes.chunks(AES.blockSize)
-        let out:[UInt8]
-        switch (blockMode) {
-        case .CFB, .CTR:
-            // CFB, CTR uses encryptBlock to decrypt
-            out = try blockMode.decryptBlocks(blocks, iv: self.iv, cipherOperation: encryptBlock)
-        default:
-            out = try blockMode.decryptBlocks(blocks, iv: self.iv, cipherOperation: decryptBlock)
-        }
-        
-        if let padding = padding {
-            return padding.remove(out, blockSize: nil)
-        }
-        
-        return out
-    }
-    
-    @available (*, deprecated=1.0)
-    private func decryptBlock(block:[UInt8]) -> [UInt8]? {
-        var state:[[UInt8]] = [[UInt8]](count: variant.Nb, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
-        for (i, row) in state.enumerate() {
-            for (j, _) in row.enumerate() {
-                state[j][i] = block[i * row.count + j]
-            }
-        }
-        
-        state = addRoundKey(state,expandedKey, variant.Nr)
-        
-        for roundCount in (1..<variant.Nr).reverse() {
-            state = invShiftRows(state)
-            state = invSubBytes(state)
-            state = addRoundKey(state, expandedKey, roundCount)
-            state = invMixColumns(state)
-        }
-        
-        state = invShiftRows(state)
-        state = invSubBytes(state)
-        state = addRoundKey(state, expandedKey, 0)
-        
-        var out:[UInt8] = [UInt8]()
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                out.append(state[j][i])
-            }
-        }
-        
-        return out
-    }
-    
-    public func decrypt(bytes:RawData, padding:Padding2? = PKCS7()) throws -> RawData {
+    public func decrypt(bytes:RawData, padding:Padding? = PKCS7()) throws -> RawData {
         if bytes.count % AES.blockSize != 0 {
             throw Error.BlockSizeExceeded
         }
@@ -343,18 +235,18 @@ final public class AES {
             }
         }
         
-        state = addRoundKey(state,expandedKey2, variant.Nr)
+        state = addRoundKey(state,expandedKey, variant.Nr)
         
         for roundCount in (1..<variant.Nr).reverse() {
             state = invShiftRows(state)
             state = invSubBytes(state)
-            state = addRoundKey(state, expandedKey2, roundCount)
+            state = addRoundKey(state, expandedKey, roundCount)
             state = invMixColumns(state)
         }
         
         state = invShiftRows(state)
         state = invSubBytes(state)
-        state = addRoundKey(state, expandedKey2, 0)
+        state = addRoundKey(state, expandedKey, 0)
         
         let out = RawData()
         for i in 0..<state.count {
@@ -366,53 +258,7 @@ final public class AES {
         return out
     }
     
-    static private func expandKey(key:[UInt8], variant:AESVariant) -> [UInt8] {
-        
-        /*
-        * Function used in the Key Expansion routine that takes a four-byte
-        * input word and applies an S-box to each of the four bytes to
-        * produce an output word.
-        */
-        func subWord(word:[UInt8]) -> [UInt8] {
-            var result = word
-            for i in 0..<4 {
-                result[i] = self.sBox[Int(word[i])]
-            }
-            return result
-        }
-
-        var w = [UInt8](count: variant.Nb * (variant.Nr + 1) * 4, repeatedValue: 0)
-        for i in 0..<variant.Nk {
-            for wordIdx in 0..<4 {
-                w[(4*i)+wordIdx] = key[(4*i)+wordIdx]
-            }
-        }
-        
-        var tmp:[UInt8]
-        for (var i = variant.Nk; i < variant.Nb * (variant.Nr + 1); i++) {
-            tmp = [UInt8](count: 4, repeatedValue: 0)
-            
-            for wordIdx in 0..<4 {
-                tmp[wordIdx] = w[4*(i-1)+wordIdx]
-            }
-            if ((i % variant.Nk) == 0) {
-                let rotWord = rotateLeft(UInt32.withBytes(tmp), n: 8).bytes(sizeof(UInt32)) // RotWord
-                tmp = subWord(rotWord)
-                tmp[0] = tmp[0] ^ Rcon[i/variant.Nk]
-            } else if (variant.Nk > 6 && (i % variant.Nk) == 4) {
-                tmp = subWord(tmp)
-            }
-
-            // xor array of bytes
-            for wordIdx in 0..<4 {
-                w[4*i+wordIdx] = w[4*(i-variant.Nk)+wordIdx]^tmp[wordIdx];
-            }
-        }
-        return w
-    }
-    
-    static private func expandKey2(key:RawData, variant:AESVariant) -> RawData {
-        
+    static private func expandKey(key:RawData, variant:AESVariant) -> RawData {
         /*
         * Function used in the Key Expansion routine that takes a four-byte
         * input word and applies an S-box to each of the four bytes to
@@ -461,32 +307,12 @@ final public class AES {
 extension AES {
     
     // byte substitution with table (S-box)
-    @available (*, deprecated=1.0)
-    public func subBytes(inout state:[[UInt8]]) {
-        for (i,row) in state.enumerate() {
-            for (j,value) in row.enumerate() {
-                state[i][j] = AES.sBox[Int(value)]
-            }
-        }
-    }
-    
     public func subBytes(inout state:[RawData]) {
         for (i,row) in state.enumerate() {
             for (j,value) in row.enumerate() {
                 state[i][j] = AES.sBox[Int(value)]
             }
         }
-    }
-    
-    @available (*, deprecated=1.0)
-    public func invSubBytes(state:[[UInt8]]) -> [[UInt8]] {
-        var result = state
-        for (i,row) in state.enumerate() {
-            for (j,value) in row.enumerate() {
-                result[i][j] = AES.invSBox[Int(value)]
-            }
-        }
-        return result
     }
     
     public func invSubBytes(state:[RawData]) -> [RawData] {
@@ -500,34 +326,11 @@ extension AES {
     }
     
     /// Applies a cyclic shift to the last 3 rows of a state matrix.
-    @available (*, deprecated=1.0)
-    public func shiftRows(state:[[UInt8]]) -> [[UInt8]] {
-        var result = state
-        for r in 1..<4 {
-            for c in 0..<variant.Nb {
-                result[r][c] = state[r][(c + r) % variant.Nb]
-            }
-        }
-        return result
-    }
-
-    /// Applies a cyclic shift to the last 3 rows of a state matrix.
     public func shiftRows(state:[RawData]) -> [RawData] {
         let result = state.copy()
         for r in 1..<4 {
             for c in 0..<variant.Nb {
                 result[r][c] = state[r][(c + r) % variant.Nb]
-            }
-        }
-        return result
-    }
-
-    @available (*, deprecated=1.0)
-    public func invShiftRows(state:[[UInt8]]) -> [[UInt8]] {
-        var result = state
-        for r in 1..<4 {
-            for c in 0..<variant.Nb {
-                result[r][(c + r) % variant.Nb] = state[r][c]
             }
         }
         return result
@@ -562,17 +365,6 @@ extension AES {
         return p
     }
     
-    @available (*, deprecated=1.0)
-    public func matrixMultiplyPolys(matrix:[[UInt8]], _ array:[UInt8]) -> [UInt8] {
-        var returnArray:[UInt8] = [UInt8](count: array.count, repeatedValue: 0)
-        for (i, row) in matrix.enumerate() {
-            for (j, boxVal) in row.enumerate() {
-                returnArray[i] = multiplyPolys(boxVal, array[j]) ^ returnArray[i]
-            }
-        }
-        return returnArray
-    }
-
     public func matrixMultiplyPolys(matrix:[RawData], _ array:RawData) -> RawData {
         let returnArray = RawData(array.count)
         for (i, row) in matrix.enumerate() {
@@ -583,20 +375,6 @@ extension AES {
         return returnArray
     }
 
-    @available (*, deprecated=1.0)
-    public func addRoundKey(state:[[UInt8]], _ expandedKeyW:[UInt8], _ round:Int) -> [[UInt8]] {
-        var newState = [[UInt8]](count: state.count, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
-        let idxRow = 4*variant.Nb*round
-        for c in 0..<variant.Nb {
-            let idxCol = variant.Nb*c
-            newState[0][c] = state[0][c] ^ expandedKeyW[idxRow+idxCol+0]
-            newState[1][c] = state[1][c] ^ expandedKeyW[idxRow+idxCol+1]
-            newState[2][c] = state[2][c] ^ expandedKeyW[idxRow+idxCol+2]
-            newState[3][c] = state[3][c] ^ expandedKeyW[idxRow+idxCol+3]
-        }
-        return newState
-    }
-    
     public func addRoundKey(state:[RawData], _ expandedKeyW:RawData, _ round:Int) -> [RawData] {
         let newState = state.copy()
         let idxRow = 4*variant.Nb*round
@@ -611,34 +389,6 @@ extension AES {
     }
 
     
-    /// mixes data (independently of one another)
-    @available (*, deprecated=1.0)
-    public func mixColumns(state:[[UInt8]]) -> [[UInt8]] {
-        var state = state
-        let colBox:[[UInt8]] = [[2,3,1,1],[1,2,3,1],[1,1,2,3],[3,1,1,2]]
-        
-        var rowMajorState = [[UInt8]](count: state.count, repeatedValue: [UInt8](count: state.first!.count, repeatedValue: 0)) //state.map({ val -> [UInt8] in return val.map { _ in return 0 } }) // zeroing
-        var newRowMajorState = rowMajorState
-        
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                rowMajorState[j][i] = state[i][j]
-            }
-        }
-        
-        for (i, row) in rowMajorState.enumerate() {
-            newRowMajorState[i] = matrixMultiplyPolys(colBox, row)
-        }
-        
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                state[i][j] = newRowMajorState[j][i]
-            }
-        }
-        
-        return state
-    }
-
     /// mixes data (independently of one another)
     public func mixColumns(state:[RawData]) -> [RawData] {
         var state = state.copy()
@@ -666,34 +416,6 @@ extension AES {
         return state
     }
 
-    @available (*, deprecated=1.0)
-    public func invMixColumns(state:[[UInt8]]) -> [[UInt8]] {
-        var state = state
-        let invColBox:[[UInt8]] = [[14,11,13,9],[9,14,11,13],[13,9,14,11],[11,13,9,14]]
-        
-        var colOrderState = state.map({ val -> [UInt8] in return val.map { _ in return 0 } }) // zeroing
-        
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                colOrderState[j][i] = state[i][j]
-            }
-        }
-        
-        var newState = state.map({ val -> [UInt8] in return val.map { _ in return 0 } })
-        
-        for (i, row) in colOrderState.enumerate() {
-            newState[i] = matrixMultiplyPolys(invColBox, row)
-        }
-        
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                state[i][j] = newState[j][i]
-            }
-        }
-        
-        return state
-    }
-    
     public func invMixColumns(state:[RawData]) -> [RawData] {
         var state = state
         let invColBox:[RawData] = [[14,11,13,9],[9,14,11,13],[13,9,14,11],[11,13,9,14]]

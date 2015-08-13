@@ -9,11 +9,6 @@
 import Foundation
 
 public protocol Padding {
-    func add(data: [UInt8], blockSize:Int) -> [UInt8]
-    func remove(data: [UInt8], blockSize:Int?) -> [UInt8]
-}
-
-public protocol Padding2 {
     func add(data: RawData, blockSize:Int) -> RawData
     func remove(data: RawData, blockSize:Int?) -> RawData
 }
