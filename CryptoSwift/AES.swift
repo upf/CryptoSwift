@@ -47,6 +47,7 @@ final public class AES {
     }
     private let key:[UInt8]
     private let iv:[UInt8]?
+    @available (*, deprecated=1.0)
     public lazy var expandedKey:[UInt8] = { AES.expandKey(self.key, variant: self.variant) }()
     public lazy var expandedKey2:RawData = { AES.expandKey2(RawData(self.key), variant: self.variant) }()
     
@@ -359,7 +360,8 @@ extension AES {
         return result
     }
     
-    // Applies a cyclic shift to the last 3 rows of a state matrix.
+    /// Applies a cyclic shift to the last 3 rows of a state matrix.
+    @available (*, deprecated=1.0)
     public func shiftRows(state:[[UInt8]]) -> [[UInt8]] {
         var result = state
         for r in 1..<4 {
@@ -370,6 +372,7 @@ extension AES {
         return result
     }
 
+    /// Applies a cyclic shift to the last 3 rows of a state matrix.
     public func shiftRows(state:[RawData]) -> [RawData] {
         let result = state.copy()
         for r in 1..<4 {
@@ -380,6 +383,7 @@ extension AES {
         return result
     }
 
+    @available (*, deprecated=1.0)
     public func invShiftRows(state:[[UInt8]]) -> [[UInt8]] {
         var result = state
         for r in 1..<4 {
@@ -429,6 +433,7 @@ extension AES {
         return returnArray
     }
 
+    @available (*, deprecated=1.0)
     public func addRoundKey(state:[[UInt8]], _ expandedKeyW:[UInt8], _ round:Int) -> [[UInt8]] {
         var newState = [[UInt8]](count: state.count, repeatedValue: [UInt8](count: variant.Nb, repeatedValue: 0))
         let idxRow = 4*variant.Nb*round
@@ -441,6 +446,20 @@ extension AES {
         }
         return newState
     }
+    
+    public func addRoundKey(state:[RawData], _ expandedKeyW:RawData, _ round:Int) -> [RawData] {
+        let newState = state.copy()
+        let idxRow = 4*variant.Nb*round
+        for c in 0..<variant.Nb {
+            let idxCol = variant.Nb*c
+            newState[0][c] = state[0][c] ^ expandedKeyW[idxRow+idxCol+0]
+            newState[1][c] = state[1][c] ^ expandedKeyW[idxRow+idxCol+1]
+            newState[2][c] = state[2][c] ^ expandedKeyW[idxRow+idxCol+2]
+            newState[3][c] = state[3][c] ^ expandedKeyW[idxRow+idxCol+3]
+        }
+        return newState
+    }
+
     
     // mixes data (independently of one another)
     public func mixColumns(state:[[UInt8]]) -> [[UInt8]] {

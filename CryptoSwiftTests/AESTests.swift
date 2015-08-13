@@ -198,6 +198,25 @@ final class AESTests: XCTestCase {
         }
     }
     
+    func testAES_addRoundKey_RawData() {
+        let input:[RawData] = [[0x00, 0x44, 0x88, 0xcc],
+            [0x11, 0x55, 0x99, 0xdd],
+            [0x22, 0x66, 0xaa, 0xee],
+            [0x33, 0x77, 0xbb, 0xff]]
+        
+        let expected:[RawData] = [[0, 64, 128, 192],
+            [16, 80, 144, 208],
+            [32, 96, 160, 224],
+            [48, 112, 176, 240]]
+        
+        if let aes = AES(key: aesKey, blockMode: .CBC) {
+            let result = aes.addRoundKey(input, aes.expandedKey2, 0)
+            XCTAssertTrue(compareMatrix(expected, b: result), "addRoundKey failed")
+        } else {
+            XCTAssert(false, "")
+        }
+    }
+    
     func testAES_mixColumns() {
         let input:[[UInt8]] = [[0x63, 0x9, 0xcd, 0xba],
             [0x53, 0x60, 0x70, 0xca],
@@ -219,6 +238,22 @@ final class AESTests: XCTestCase {
         }
     }
     
+    func testExpandKeyPerformance1() {
+        measureMetrics([XCTPerformanceMetric_WallClockTime], automaticallyStartMeasuring: true, forBlock: { () -> Void in
+            for _ in 0...9999 {
+                AES(key: self.aesKey, blockMode: .CBC)?.expandedKey
+            }
+        })
+    }
+
+    func testExpandKeyPerformance2() {
+        measureMetrics([XCTPerformanceMetric_WallClockTime], automaticallyStartMeasuring: true, forBlock: { () -> Void in
+            for _ in 0...9999 {
+                AES(key: self.aesKey, blockMode: .CBC)?.expandedKey2
+            }
+        })
+    }
+
     func testAESPerformance() {
         let key:[UInt8] = [0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c];
         let iv:[UInt8] = [0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F]
