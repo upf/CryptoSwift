@@ -342,6 +342,7 @@ final public class AES {
 extension AES {
     
     // byte substitution with table (S-box)
+    @available (*, deprecated=1.0)
     public func subBytes(inout state:[[UInt8]]) {
         for (i,row) in state.enumerate() {
             for (j,value) in row.enumerate() {
@@ -350,7 +351,26 @@ extension AES {
         }
     }
     
+    public func subBytes(inout state:[RawData]) {
+        for (i,row) in state.enumerate() {
+            for (j,value) in row.enumerate() {
+                state[i][j] = AES.sBox[Int(value)]
+            }
+        }
+    }
+    
+    @available (*, deprecated=1.0)
     public func invSubBytes(state:[[UInt8]]) -> [[UInt8]] {
+        var result = state
+        for (i,row) in state.enumerate() {
+            for (j,value) in row.enumerate() {
+                result[i][j] = AES.invSBox[Int(value)]
+            }
+        }
+        return result
+    }
+    
+    public func invSubBytes(state:[RawData]) -> [RawData] {
         var result = state
         for (i,row) in state.enumerate() {
             for (j,value) in row.enumerate() {
@@ -423,8 +443,19 @@ extension AES {
         return p
     }
     
+    @available (*, deprecated=1.0)
     public func matrixMultiplyPolys(matrix:[[UInt8]], _ array:[UInt8]) -> [UInt8] {
         var returnArray:[UInt8] = [UInt8](count: array.count, repeatedValue: 0)
+        for (i, row) in matrix.enumerate() {
+            for (j, boxVal) in row.enumerate() {
+                returnArray[i] = multiplyPolys(boxVal, array[j]) ^ returnArray[i]
+            }
+        }
+        return returnArray
+    }
+
+    public func matrixMultiplyPolys(matrix:[RawData], _ array:RawData) -> RawData {
+        let returnArray = RawData(array.count)
         for (i, row) in matrix.enumerate() {
             for (j, boxVal) in row.enumerate() {
                 returnArray[i] = multiplyPolys(boxVal, array[j]) ^ returnArray[i]
@@ -461,7 +492,8 @@ extension AES {
     }
 
     
-    // mixes data (independently of one another)
+    /// mixes data (independently of one another)
+    @available (*, deprecated=1.0)
     public func mixColumns(state:[[UInt8]]) -> [[UInt8]] {
         var state = state
         let colBox:[[UInt8]] = [[2,3,1,1],[1,2,3,1],[1,1,2,3],[3,1,1,2]]
@@ -487,7 +519,35 @@ extension AES {
         
         return state
     }
-    
+
+    /// mixes data (independently of one another)
+    public func mixColumns(state:[RawData]) -> [RawData] {
+        var state = state.copy()
+        let colBox:[RawData] = [[2,3,1,1],[1,2,3,1],[1,1,2,3],[3,1,1,2]]
+        
+        var rowMajorState = state.copy() // zeroing
+        var newRowMajorState = rowMajorState
+        
+        for i in 0..<state.count {
+            for j in 0..<state[0].count {
+                rowMajorState[j][i] = state[i][j]
+            }
+        }
+        
+        for (i, row) in rowMajorState.enumerate() {
+            newRowMajorState[i] = matrixMultiplyPolys(colBox, row)
+        }
+        
+        for i in 0..<state.count {
+            for j in 0..<state[0].count {
+                state[i][j] = newRowMajorState[j][i]
+            }
+        }
+        
+        return state
+    }
+
+    @available (*, deprecated=1.0)
     public func invMixColumns(state:[[UInt8]]) -> [[UInt8]] {
         var state = state
         let invColBox:[[UInt8]] = [[14,11,13,9],[9,14,11,13],[13,9,14,11],[11,13,9,14]]
@@ -514,4 +574,32 @@ extension AES {
         
         return state
     }
+    
+    public func invMixColumns(state:[RawData]) -> [RawData] {
+        var state = state
+        let invColBox:[RawData] = [[14,11,13,9],[9,14,11,13],[13,9,14,11],[11,13,9,14]]
+        
+        var colOrderState = state.copy() // zeroing
+        
+        for i in 0..<state.count {
+            for j in 0..<state[0].count {
+                colOrderState[j][i] = state[i][j]
+            }
+        }
+        
+        var newState = state.copy() // zeroing
+        
+        for (i, row) in colOrderState.enumerate() {
+            newState[i] = matrixMultiplyPolys(invColBox, row)
+        }
+        
+        for i in 0..<state.count {
+            for j in 0..<state[0].count {
+                state[i][j] = newState[j][i]
+            }
+        }
+        
+        return state
+    }
+
 }

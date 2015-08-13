@@ -121,6 +121,24 @@ final class AESTests: XCTestCase {
         XCTAssertTrue(compareMatrix(input, b: inverted), "invSubBytes failed")
     }
     
+    func testAES_SubBytes_RawData() {
+        let input:[RawData] = [[0x00, 0x10, 0x20, 0x30],
+            [0x40, 0x50, 0x60, 0x70],
+            [0x80, 0x90, 0xa0, 0xb0],
+            [0xc0, 0xd0, 0xe0, 0xf0]]
+        
+        let expected:[RawData] = [[0x63, 0xca, 0xb7, 0x04],
+            [0x09, 0x53, 0xd0, 0x51],
+            [0xcd, 0x60, 0xe0, 0xe7],
+            [0xba, 0x70, 0xe1, 0x8c]]
+        
+        var substituted = input
+        AES(key: aesKey, blockMode: .CBC)!.subBytes(&substituted)
+        XCTAssertTrue(compareMatrix(expected, b: substituted), "subBytes failed")
+        let inverted = AES(key: aesKey, blockMode: .CBC)!.invSubBytes(substituted)
+        XCTAssertTrue(compareMatrix(input, b: inverted), "invSubBytes failed")
+    }
+    
     func testAES_shiftRows() {
         let input:[[UInt8]] = [[0x63, 0x09, 0xcd, 0xba],
             [0xca, 0x53, 0x60, 0x70],
@@ -224,6 +242,27 @@ final class AESTests: XCTestCase {
             [0x8c, 0x4, 0x51, 0xe7]]
         
         let expected:[[UInt8]] = [[0x5f, 0x57, 0xf7, 0x1d],
+            [0x72, 0xf5, 0xbe, 0xb9],
+            [0x64, 0xbc, 0x3b, 0xf9],
+            [0x15, 0x92, 0x29, 0x1a]]
+        
+        if let aes = AES(key: aesKey, blockMode: .CBC) {
+            let mixed = aes.mixColumns(input)
+            XCTAssertTrue(compareMatrix(expected, b: mixed), "mixColumns failed")
+            let inverted = aes.invMixColumns(mixed)
+            XCTAssertTrue(compareMatrix(input, b: inverted), "invMixColumns failed")
+        } else {
+            XCTAssert(false, "")
+        }
+    }
+    
+    func testAES_mixColumns_RawData() {
+        let input:[RawData] = [[0x63, 0x9, 0xcd, 0xba],
+            [0x53, 0x60, 0x70, 0xca],
+            [0xe0, 0xe1, 0xb7, 0xd0],
+            [0x8c, 0x4, 0x51, 0xe7]]
+        
+        let expected:[RawData] = [[0x5f, 0x57, 0xf7, 0x1d],
             [0x72, 0xf5, 0xbe, 0xb9],
             [0x64, 0xbc, 0x3b, 0xf9],
             [0x15, 0x92, 0x29, 0x1a]]
