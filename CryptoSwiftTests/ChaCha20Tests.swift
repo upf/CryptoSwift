@@ -52,16 +52,16 @@ final class ChaCha20Tests: XCTestCase {
             
             let setup = (key: keys[idx], iv: ivs[idx])
             do {
-                let encrypted = try Cipher.ChaCha20(setup).encrypt(message)
+                let encrypted = try Cipher.ChaCha20(setup).encrypt(RawData(message)) //FIXME: RawData conversion
                 let decrypted = try Cipher.ChaCha20(setup).decrypt(encrypted)
-                XCTAssertEqual(message, decrypted, "ChaCha20 decryption failed");
+                XCTAssertEqual(RawData(message), decrypted, "ChaCha20 decryption failed");
                 
                 // check extension
                 let messageData = NSData(bytes: message, length: message.count);
                 let encrypted2 = try! messageData.encrypt(Cipher.ChaCha20(setup))
                 XCTAssertNotNil(encrypted2, "")
                 if let encrypted2 = encrypted2 {
-                    XCTAssertEqual(NSData.withBytes(encrypted), encrypted2, "ChaCha20 extension failed")
+                    XCTAssertEqual(NSData.withBytes(Array(encrypted)), encrypted2, "ChaCha20 extension failed") //FIXME: RawData conversion
                 }
             } catch Cipher.Error.EncryptError {
                 XCTAssert(false, "Encryption failed")

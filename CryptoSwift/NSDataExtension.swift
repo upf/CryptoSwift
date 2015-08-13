@@ -61,13 +61,13 @@ extension NSData {
     }
 
     public func encrypt(cipher: Cipher) throws -> NSData? {
-        let encrypted = try cipher.encrypt(self.arrayOfBytes())
-        return NSData.withBytes(encrypted)
+        let encrypted = try cipher.encrypt(RawData(self.arrayOfBytes())) //FIXME: directly RawData->NSData
+        return NSData.withBytes(Array(encrypted)) //FIXME: directly RawData->NSData
     }
 
     public func decrypt(cipher: Cipher) throws -> NSData? {
-        let decrypted = try cipher.decrypt(self.arrayOfBytes())
-        return NSData.withBytes(decrypted)
+        let decrypted = try cipher.decrypt(RawData(self.arrayOfBytes())) //FIXME: directly RawData->NSData
+        return NSData.withBytes(Array(decrypted)) //FIXME: directly RawData->NSData
     }
     
     public func authenticate(authenticator: Authenticator) -> NSData? {

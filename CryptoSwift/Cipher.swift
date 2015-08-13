@@ -33,7 +33,7 @@ public enum Cipher {
     
     - returns: Value of Cipher
     */
-    case AES(key: [UInt8], iv: [UInt8], blockMode: CipherBlockMode)
+    case AES(key: RawData, iv: RawData, blockMode: CipherBlockMode)
     
     /**
     Encrypt message
@@ -42,13 +42,13 @@ public enum Cipher {
     
     - returns: encrypted message
     */
-    public func encrypt(bytes: [UInt8]) throws -> [UInt8] {
+    public func encrypt(bytes: RawData) throws -> RawData {
         switch (self) {
             case .ChaCha20(let key, let iv):
                 guard let chacha = CryptoSwift.ChaCha20(key: key, iv: iv) else {
                     throw Error.EncryptError
                 }
-                return try chacha.encrypt(bytes)
+                return try RawData(chacha.encrypt(Array(bytes)))
             case .AES(let key, let iv, let blockMode):
                 guard let aes = CryptoSwift.AES(key: key, iv: iv, blockMode: blockMode) else {
                     throw Error.EncryptError
@@ -64,13 +64,13 @@ public enum Cipher {
     
     - returns: Plaintext message
     */
-    public func decrypt(bytes: [UInt8]) throws -> [UInt8] {
+    public func decrypt(bytes: RawData) throws -> RawData {
         switch (self) {
             case .ChaCha20(let key, let iv):
                 guard let chacha = CryptoSwift.ChaCha20(key: key, iv: iv) else {
                     throw Error.DecryptError
                 }
-                return try chacha.decrypt(bytes)
+                return try RawData(chacha.decrypt(Array(bytes)))
             case .AES(let key, let iv, let blockMode):
                 guard let aes = CryptoSwift.AES(key: key, iv: iv, blockMode: blockMode) else {
                     throw Error.DecryptError
