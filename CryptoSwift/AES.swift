@@ -417,30 +417,30 @@ extension AES {
     }
 
     public func invMixColumns(state:[RawData]) -> [RawData] {
-        var state = state
+        var outputState = state.copy()
         let invColBox:[RawData] = [[14,11,13,9],[9,14,11,13],[13,9,14,11],[11,13,9,14]]
         
-        var colOrderState = state.copy() // zeroing
+        var colOrderState = outputState.copy() // zeroing
         
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                colOrderState[j][i] = state[i][j]
+        for i in 0..<outputState.count {
+            for j in 0..<outputState[0].count {
+                colOrderState[j][i] = outputState[i][j]
             }
         }
         
-        var newState = state.copy() // zeroing
+        var newState = outputState.copy() // zeroing
         
         for (i, row) in colOrderState.enumerate() {
             newState[i] = matrixMultiplyPolys(invColBox, row)
         }
         
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                state[i][j] = newState[j][i]
+        for i in 0..<outputState.count {
+            for j in 0..<outputState[0].count {
+                outputState[i][j] = newState[j][i]
             }
         }
         
-        return state
+        return outputState
     }
 
 }
