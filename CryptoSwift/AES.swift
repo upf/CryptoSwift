@@ -145,17 +145,18 @@ final public class AES {
     */
 
     public func encrypt(bytes:RawData, padding:Padding? = PKCS7()) throws -> RawData {
-        var finalBytes = bytes.copy()
+        var finalBytes:RawData
         
         if let padding = padding {
             finalBytes = padding.add(bytes, blockSize: AES.blockSize)
         } else if bytes.count % AES.blockSize != 0 {
             throw Error.BlockSizeExceeded
+        } else {
+            finalBytes = bytes.copy()
         }
         
         let blocks = finalBytes.chunks(AES.blockSize) // 0.34
-        let thisiv:RawData? = self.iv == nil ? nil : RawData(self.iv!)
-        return try blockMode.encryptBlocks(blocks, iv: thisiv, cipherOperation: encryptBlock)
+        return try blockMode.encryptBlocks(blocks, iv: self.iv, cipherOperation: encryptBlock)
     }
     
     private func encryptBlock(block:RawData) -> RawData? {
@@ -205,14 +206,13 @@ final public class AES {
         
         let blocks = bytes.chunks(AES.blockSize)
         let out:RawData
-        let thisiv:RawData? = self.iv == nil ? nil : RawData(self.iv!)
         
         switch (blockMode) {
         case .CFB, .CTR:
             // CFB, CTR uses encryptBlock to decrypt
-            out = try blockMode.decryptBlocks(blocks, iv: thisiv, cipherOperation: encryptBlock)
+            out = try blockMode.decryptBlocks(blocks, iv: self.iv, cipherOperation: encryptBlock)
         default:
-            out = try blockMode.decryptBlocks(blocks, iv: thisiv, cipherOperation: decryptBlock)
+            out = try blockMode.decryptBlocks(blocks, iv: self.iv, cipherOperation: decryptBlock)
         }
         
         if let padding = padding {
@@ -391,15 +391,15 @@ extension AES {
     
     /// mixes data (independently of one another)
     public func mixColumns(state:[RawData]) -> [RawData] {
-        var state = state.copy()
+        var newState = state.copy()
         let colBox:[RawData] = [[2,3,1,1],[1,2,3,1],[1,1,2,3],[3,1,1,2]]
         
-        var rowMajorState = state.copy() // zeroing
-        var newRowMajorState = rowMajorState
+        var rowMajorState = state.copy()    // zeroing
+        var newRowMajorState = state.copy() //
         
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                rowMajorState[j][i] = state[i][j]
+        for i in 0..<newState.count {
+            for j in 0..<newState[0].count {
+                rowMajorState[j][i] = newState[i][j]
             }
         }
         
@@ -407,13 +407,13 @@ extension AES {
             newRowMajorState[i] = matrixMultiplyPolys(colBox, row)
         }
         
-        for i in 0..<state.count {
-            for j in 0..<state[0].count {
-                state[i][j] = newRowMajorState[j][i]
+        for i in 0..<newState.count {
+            for j in 0..<newState[0].count {
+                newState[i][j] = newRowMajorState[j][i]
             }
         }
         
-        return state
+        return newState
     }
 
     public func invMixColumns(state:[RawData]) -> [RawData] {
