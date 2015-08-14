@@ -86,7 +86,7 @@ private struct CBCMode: BlockMode {
         }
         
         let out = RawData()
-        var prevCiphertext = iv.copy() // for the first time prevCiphertext = iv
+        var prevCiphertext = iv // for the first time prevCiphertext = iv
         for plaintext in blocks {
             if let encrypted = cipherOperation(block: xor(prevCiphertext, b: plaintext)) {
                 out.extend(encrypted)
@@ -103,7 +103,7 @@ private struct CBCMode: BlockMode {
         }
         
         let out = RawData()
-        var prevCiphertext = iv.copy() // for the first time prevCiphertext = iv
+        var prevCiphertext = iv // for the first time prevCiphertext = iv
         for ciphertext in blocks {
             if let decrypted = cipherOperation(block: ciphertext) { // decrypt
                 out.extend(xor(prevCiphertext, b: decrypted)) //FIXME: b:
