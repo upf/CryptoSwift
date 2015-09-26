@@ -1,6 +1,7 @@
 #CryptoSwift
 
 Crypto related functions and helpers for [Swift](https://developer.apple.com/swift/) implemented in Swift. ([#PureSwift](https://twitter.com/hashtag/pureswift))
+<p align='center'>modified with watchos2 target in the podspec</p>
 
 -------
 <p align="center">
